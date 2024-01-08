@@ -39,13 +39,16 @@ from subprocess import run, PIPE
 import importlib.metadata as metadata
 import os
 import json
+import time
 
 try:
     from packaging import version
 except ModuleNotFoundError:
-    # If packaging is not installed, install it using pip
     subprocess.check_call([sys.executable, "-m", "pip", "install", "packaging"])
-    from packaging import version  # Import again after installation
+    from packaging import version
+
+config_filename = "config.json"
+repo_id = "lavawolfiee/Mixtral-8x7B-Instruct-v0.1-offloading-demo"
 
 
 def check_requirements(requirements_file="requirements.txt"):
@@ -86,20 +89,24 @@ def check_requirements(requirements_file="requirements.txt"):
         )
         for package in missing_packages:
             print(f" - {package}")
-        print("\n\033[34mPlease 'pip install -r requirements.txt' and rerun the script.\033[0m")
+        print(
+            "\n\033[34mPlease 'pip install -r requirements.txt' and rerun the script.\033[0m"
+        )
         sys.exit(1)
     else:
-        print("\033[34mAll required packages are installed with correct versions.\033[0m")
+        print(
+            "\033[34mAll required packages are installed with correct versions.\033[0m"
+        )
 
 
-def setup_and_save_config(config_filename="config.json"):
+def setup_and_save_config(config_filename=config_filename):
     # Check if the configuration file already exists
     if os.path.exists(config_filename):
         with open(config_filename, "r") as file:
             config = json.load(file)
 
         user_choice = input(
-            f"\n\033[34mConfiguration file {config_filename} already exists.\033[0m\n\n\033[33m{json.dumps(config, indent=1)}\033[0m\n\n\033[32m-->Do you want to use it? (yes/no):\033[0m "
+            f"\033[34mConfiguration file {config_filename} already exists.\033[0m\n\n\033[33m{json.dumps(config, indent=1)}\033[0m\n\n\033[32m--> Do you want to use it? (yes/no):\033[0m "
         ).lower()
         if user_choice == "yes":
             print("\033[34mUsing existing configuration.\033[0m")
@@ -112,18 +119,36 @@ def setup_and_save_config(config_filename="config.json"):
         "model_path": input(
             "\033[32m--> Enter the path for model weights (leave blank to download in the source folder):\033[0m "
         ),
-        "RAM ": input(
-            "\033[32m--> Enter available RAM memory (GB):\033[0m "
-        ),
-        "VRAM": input(
-            "\033[32m--> Enter available GPU memory (GB):\033[0m "
-        ),
+        "RAM ": input("\033[32m--> Enter available RAM memory (GB):\033[0m "),
+        "VRAM": input("\033[32m--> Enter available GPU memory (GB):\033[0m "),
     }
 
-    # Save the new configuration to a file
+    # Save configuration
     with open(config_filename, "w") as file:
         json.dump(config, file, indent=4)
     print(f"\033[34mConfiguration saved to {config_filename}\033[0m")
+
+
+def download_huggingface_model(repo_id=repo_id, model_path=""):
+    from huggingface_hub import snapshot_download
+
+    # check if model path folder is empty
+    if os.path.exists(model_path):
+        if os.listdir(model_path):
+            user_choice = input(
+                f"\033[34mModel folder {model_path} is not empty.\033[0m\n\n\033[32m--> Do you want to download the model weights anyway? (yes/no):\033[0m "
+            ).lower()
+            if user_choice == "no":
+                print("\033[34mSkipping model weights download.\033[0m")
+                return
+    try:
+        print(f"\033[34mDownloading model weights from {repo_id}...\033[0m")
+        time.sleep(1)
+        file_path = snapshot_download(repo_id=repo_id, cache_dir=model_path)
+        
+        print(f"\033[34mModel weights downloaded to {file_path}\033[0m")
+    except Exception as e:
+        print(f"\033[31mError downloading model weights:\033[0m {e}")
 
 
 def main():
@@ -131,5 +156,12 @@ def main():
 
 
 if __name__ == "__main__":
-    setup_and_save_config()
     check_requirements()
+    setup_and_save_config()
+
+    with open(config_filename, "r") as file:
+        config = json.load(file)
+    if config["model_path"] == "":
+        config["model_path"] = os.path.join(os.getcwd(), "model")
+
+    download_huggingface_model(repo_id=repo_id, model_path=config["model_path"])
