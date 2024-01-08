@@ -82,14 +82,14 @@ def check_requirements(requirements_file="requirements.txt"):
 
     if missing_packages:
         print(
-            "\nThe following packages are missing or do not meet the version requirements:"
+            "\n\033[34mThe following packages are missing or do not meet the version requirements:\033[0m"
         )
         for package in missing_packages:
             print(f" - {package}")
-        print("\nPlease 'pip install -r requirements.txt' and rerun the script.")
+        print("\n\033[34mPlease 'pip install -r requirements.txt' and rerun the script.\033[0m")
         sys.exit(1)
     else:
-        print("All required packages are installed with correct versions.")
+        print("\033[34mAll required packages are installed with correct versions.\033[0m")
 
 
 def setup_and_save_config(config_filename="config.json"):
@@ -97,48 +97,37 @@ def setup_and_save_config(config_filename="config.json"):
     if os.path.exists(config_filename):
         with open(config_filename, "r") as file:
             config = json.load(file)
-        
+
         user_choice = input(
-            f"Configuration file {config_filename} already exists.\n{json.dumps(config, indent=1)}\n\nDo you want to use it? (yes/no): "
+            f"\n\033[34mConfiguration file {config_filename} already exists.\033[0m\n\n\033[33m{json.dumps(config, indent=1)}\033[0m\n\n\033[32m-->Do you want to use it? (yes/no):\033[0m "
         ).lower()
         if user_choice == "yes":
-            print("Using existing configuration.")
+            print("\033[34mUsing existing configuration.\033[0m")
             return
         else:
-            print("Creating new configuration.")
+            print("\033[34mCreating new configuration.\033[0m")
 
     # Create new configuration
     config = {
-        "model_path": input("Enter the path for model weights (leave blank to download in the source folder): "),
-
-        "other_settings": {
-            "setting1": input("Enter value for setting1: "),
-            "setting2": input("Enter value for setting2: "),
-        },
+        "model_path": input(
+            "\033[32m--> Enter the path for model weights (leave blank to download in the source folder):\033[0m "
+        ),
+        "RAM ": input(
+            "\033[32m--> Enter available RAM memory (GB):\033[0m "
+        ),
+        "VRAM": input(
+            "\033[32m--> Enter available GPU memory (GB):\033[0m "
+        ),
     }
 
     # Save the new configuration to a file
     with open(config_filename, "w") as file:
         json.dump(config, file, indent=4)
-    print(f"Configuration saved to {config_filename}")
+    print(f"\033[34mConfiguration saved to {config_filename}\033[0m")
 
 
 def main():
-    # Create the parser
-    parser = argparse.ArgumentParser(description="Mixtral8x7B-Instruct CLI Tool")
-
-    # Add arguments
-    parser.add_argument(
-        "--opl",
-        help="Increasing offload_per_layer (OPL) will decrease GPU VRAM usage, increase RAM usage and decrease generation speed. \
-            Decreasing offload_per_layer will have the opposite effect. \
-            Assign this to 5 if you have only 12 GB of GPU VRAM",
-        type=str,
-    )
-    parser.add_argument("--config", help="Path to the configuration file", type=str)
-
-    # Parse the arguments
-    args = parser.parse_args()
+    return
 
 
 if __name__ == "__main__":
