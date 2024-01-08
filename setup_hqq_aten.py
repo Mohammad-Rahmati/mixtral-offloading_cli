@@ -6,5 +6,4 @@ setup(name='hqq_aten',
 	extra_compile_args=['-O3'],
  	cmdclass={'build_ext': cpp_extension.BuildExtension})
 
-#python3 setup_hqq_aten.py bdist_wheel
-#pip install dist/hqq_aten-<version>-<tags>.whl
+#python3 setup.py install

@@ -6,42 +6,28 @@ Mixtral8x7B-Instruct (https://huggingface.co/mistralai/Mixtral-8x7B-v0.1) CLI To
 This module, `llm_cli.py`, provides a command-line interface for interacting with Mixtral8x7B-Instruct. 
 It allows users to load the model, perform text generation, and access various functionalities of the LLM in a convenient and user-friendly manner.
 
-Features:
-- Model Initialization: Load and initialize the LLM with specified configurations.
-- Text Generation: Input prompts and receive generated text from the LLM.
-- Model Management: Download model weights, update configurations, and handle various model-related tasks.
-- Additional Utilities: Additional functionalities like logging, error handling, and custom settings for advanced users.
-
-The CLI is designed to be intuitive, providing clear guidance and instructions for both new and experienced users. 
-It leverages Python libraries such as `argparse` for parsing command-line arguments and handles various scenarios gracefully, 
-ensuring a smooth user experience.
-
-Usage:
-To use this tool, run the script with the required arguments from the command line. For detailed instructions on available commands and options, use the `-h` or `--help` flag.
-
-Example:
-    python llm_cli.py --generate "Hello, world!" --config config.json
-
-Note:
-This script assumes that all necessary dependencies are installed and Python 3.x is used. For detailed setup instructions and requirements, refer to the README file.
-
 Acknowledgments:
 This tool is based on the work found in https://github.com/dvmazur/mixtral-offloading.git. I thank them for their foundational work, which has been instrumental in the development of this CLI tool.
 
-Author: Mo 
-Version: 1.0.0
+Author: 1110ra
 """
+import os
 
+os.system("cls" if os.name == "nt" else "clear")
+
+import warnings
+
+warnings.filterwarnings(
+    "ignore", message="Initializing zero-element tensors is a no-op"
+)
 import argparse
 import sys
 import subprocess
 from subprocess import run, PIPE
 import importlib.metadata as metadata
-import os
 import json
 import time
-import warnings
-warnings.filterwarnings("ignore", message="Initializing zero-element tensors is a no-op")
+
 try:
     from packaging import version
 except ModuleNotFoundError:
@@ -132,26 +118,50 @@ def setup_and_save_config(config_filename=config_filename):
 
 def download_huggingface_model(repo_id=repo_id, model_path=""):
     from huggingface_hub import snapshot_download
+
+    os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
+
     try:
-        print(f"\033[34mDownloading model weights from {repo_id}...\033[0m")
+        print(f"\033[34mDownloading model weights from {repo_id}\033[0m")
         time.sleep(1)
         file_path = snapshot_download(repo_id=repo_id, cache_dir=model_path)
+        for f in os.listdir(model_path):
+            if f.startswith("tmp"):
+                os.remove(os.path.join(model_path, f))
 
         print(f"\033[34mModel weights downloaded to {file_path}\033[0m")
         return file_path
+
     except Exception as e:
         print(f"\033[31mError downloading model weights:\033[0m {e}")
 
+
 def spinning_wheel():
-    anim = ["[    ]", "[=   ]", "[==  ]", "[=== ]", "[ ===]", "[  ==]", "[   =]", "[    ]", "[   =]", "[  ==]", "[ ===]", "[=== ]", "[==  ]", "[=   ]"]
+    anim = [
+        "[    ]",
+        "[=   ]",
+        "[==  ]",
+        "[=== ]",
+        "[ ===]",
+        "[  ==]",
+        "[   =]",
+        "[    ]",
+        "[   =]",
+        "[  ==]",
+        "[ ===]",
+        "[=== ]",
+        "[==  ]",
+        "[=   ]",
+    ]
     while not thread_stop_event.is_set():  # Continue while the stop event is not set
         for frame in anim:
-            if thread_stop_event.is_set(): 
+            if thread_stop_event.is_set():
                 print("\033[K\r✅", end="\n")
                 break
             print(frame, end="\033[K\r")
             sys.stdout.flush()
             time.sleep(0.1)
+
 
 def main(state_path=""):
     import torch
@@ -161,15 +171,15 @@ def main(state_path=""):
     from tqdm.auto import trange
     from transformers import AutoConfig, AutoTokenizer
     from transformers.utils import logging as hf_logging
-
     from src.build_model import OffloadConfig, QuantConfig, build_model
+    from transformers import TextStreamer
 
     model_name = "mistralai/Mixtral-8x7B-Instruct-v0.1"
     quantized_model_name = "lavawolfiee/Mixtral-8x7B-Instruct-v0.1-offloading-demo"
 
     config = AutoConfig.from_pretrained(quantized_model_name)
-    device = torch.device("cuda:0")
-    offload_per_layer = 2
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    offload_per_layer = 1
     num_experts = config.num_local_experts
 
     offload_config = OffloadConfig(
@@ -202,13 +212,10 @@ def main(state_path=""):
         state_path=state_path,
     )
 
-    from transformers import TextStreamer
-
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
     past_key_values = None
     sequence = None
-
     seq_len = 0
     while True:
         print("User: ", end="")
@@ -216,13 +223,17 @@ def main(state_path=""):
         print("\n")
 
         user_entry = dict(role="user", content=user_input)
-        input_ids = tokenizer.apply_chat_template([user_entry], return_tensors="pt").to(device)
+        input_ids = tokenizer.apply_chat_template([user_entry], return_tensors="pt").to(
+            device
+        )
 
         if past_key_values is None:
             attention_mask = torch.ones_like(input_ids)
         else:
             seq_len = input_ids.size(1) + past_key_values[0][0][0].size(1)
-            attention_mask = torch.ones([1, seq_len - 1], dtype=torch.int, device=device)
+            attention_mask = torch.ones(
+                [1, seq_len - 1], dtype=torch.int, device=device
+            )
 
         print("Mixtral: ", end="")
         result = model.generate(
@@ -238,11 +249,11 @@ def main(state_path=""):
             return_dict_in_generate=True,
             output_hidden_states=True,
         )
-        print("\n")
 
         sequence = result["sequences"]
         past_key_values = result["past_key_values"]
-    
+
+
 if __name__ == "__main__":
     check_requirements()
     setup_and_save_config()
@@ -252,9 +263,15 @@ if __name__ == "__main__":
     if config["model_path"] == "":
         config["model_path"] = os.path.join(os.getcwd(), "model")
 
-    state_path = download_huggingface_model(repo_id=repo_id, model_path=config["model_path"])
+    if os.path.exists(config["model_path"]):
+        state_path = os.path.join(
+            config["model_path"],
+            "models--lavawolfiee--Mixtral-8x7B-Instruct-v0.1-offloading-demo/snapshots/3d47c8315811b9e0135d4fac21deb88309c6551c",
+        )
+    else:
+        state_path = download_huggingface_model(
+            repo_id=repo_id, model_path=config["model_path"]
+        )
 
+    os.system("cls" if os.name == "nt" else "clear")
     main(state_path=state_path)
-
-
-    
