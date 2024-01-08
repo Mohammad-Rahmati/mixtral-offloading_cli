@@ -1,5 +1,4 @@
 {
-    "model_path": "",
-    "RAM ": "50",
-    "VRAM": "24"
+    "model_path": "/home/mo/mixtral-offloading_cli/model",
+    "offload_per_layer": "1"
 }

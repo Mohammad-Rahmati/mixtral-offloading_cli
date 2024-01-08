@@ -90,31 +90,34 @@ def setup_and_save_config(config_filename=config_filename):
     # Check if the configuration file already exists
     if os.path.exists(config_filename):
         with open(config_filename, "r") as file:
-            config = json.load(file)
+            config_user = json.load(file)
 
         user_choice = input(
-            f"\033[34mConfiguration file {config_filename} already exists.\033[0m\n\n\033[33m{json.dumps(config, indent=1)}\033[0m\n\n\033[32m--> Do you want to use it? (yes/no):\033[0m "
+            f"\033[34mConfiguration file {config_filename} already exists.\033[0m\n\n\033[33m{json.dumps(config_user, indent=1)}\033[0m\n\n\033[32m--> Do you want to use it? (yes/no):\033[0m "
         ).lower()
         if user_choice == "yes":
             print("\033[34mUsing existing configuration.\033[0m")
-            return
+            return config_user
         else:
             print("\033[34mCreating new configuration.\033[0m")
 
     # Create new configuration
-    config = {
+    config_user = {
         "model_path": input(
-            "\033[32m--> Enter the path for model weights (leave blank to download in the source folder):\033[0m "
+            f"\033[32m--> Enter the path for model weights (default: {os.path.join(os.getcwd(), 'model')}):\033[0m "
         ),
-        "RAM ": input("\033[32m--> Enter available RAM memory (GB):\033[0m "),
-        "VRAM": input("\033[32m--> Enter available GPU memory (GB):\033[0m "),
+        "offload_per_layer": input("\033[32m--> Enter offload per layer:\033[0m ")
     }
+    
+    if config_user["model_path"] == "":
+        config_user["model_path"] = os.path.join(os.getcwd(), "model")
 
     # Save configuration
     with open(config_filename, "w") as file:
-        json.dump(config, file, indent=4)
+        json.dump(config_user, file, indent=4)
+    
     print(f"\033[34mConfiguration saved to {config_filename}\033[0m")
-
+    return config_user
 
 def download_huggingface_model(repo_id=repo_id, model_path=""):
     from huggingface_hub import snapshot_download
@@ -163,7 +166,7 @@ def spinning_wheel():
             time.sleep(0.1)
 
 
-def main(state_path=""):
+def main(state_path="", config_user=""):
     import torch
     from torch.nn import functional as F
     from hqq.core.quantize import BaseQuantizeConfig
@@ -173,13 +176,12 @@ def main(state_path=""):
     from transformers.utils import logging as hf_logging
     from src.build_model import OffloadConfig, QuantConfig, build_model
     from transformers import TextStreamer
-
     model_name = "mistralai/Mixtral-8x7B-Instruct-v0.1"
     quantized_model_name = "lavawolfiee/Mixtral-8x7B-Instruct-v0.1-offloading-demo"
 
     config = AutoConfig.from_pretrained(quantized_model_name)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    offload_per_layer = 1
+    offload_per_layer = int(config_user["offload_per_layer"])
     num_experts = config.num_local_experts
 
     offload_config = OffloadConfig(
@@ -256,22 +258,16 @@ def main(state_path=""):
 
 if __name__ == "__main__":
     check_requirements()
-    setup_and_save_config()
+    config_user = setup_and_save_config()
 
-    with open(config_filename, "r") as file:
-        config = json.load(file)
-    if config["model_path"] == "":
-        config["model_path"] = os.path.join(os.getcwd(), "model")
-
-    if os.path.exists(config["model_path"]):
+    if os.path.exists(config_user["model_path"]):
         state_path = os.path.join(
-            config["model_path"],
+            config_user["model_path"],
             "models--lavawolfiee--Mixtral-8x7B-Instruct-v0.1-offloading-demo/snapshots/3d47c8315811b9e0135d4fac21deb88309c6551c",
         )
     else:
         state_path = download_huggingface_model(
             repo_id=repo_id, model_path=config["model_path"]
         )
-
     os.system("cls" if os.name == "nt" else "clear")
-    main(state_path=state_path)
+    main(state_path=state_path, config_user=config_user)
