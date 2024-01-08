@@ -207,7 +207,7 @@ def build_model(
         offload_size=offload_config.offload_size,
         buffer_size=offload_config.buffer_size,
     )
-    for layer_idx in trange(model_config.num_hidden_layers, desc="Loading experts"):
+    for layer_idx in trange(model_config.num_hidden_layers, desc="Loading experts", disable=True):
         curr_layer = model.model.layers[layer_idx]
         curr_layer.block_sparse_moe = SparseMoeWrapper(
             model_config,

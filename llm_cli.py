@@ -26,7 +26,16 @@ import subprocess
 from subprocess import run, PIPE
 import importlib.metadata as metadata
 import json
+import threading
 import time
+import threading
+import torch
+from torch.nn import functional as F
+from hqq.core.quantize import BaseQuantizeConfig
+from huggingface_hub import snapshot_download
+from transformers import AutoConfig, AutoTokenizer
+from src.build_model import OffloadConfig, QuantConfig, build_model
+from transformers import TextStreamer
 
 try:
     from packaging import version
@@ -96,28 +105,28 @@ def setup_and_save_config(config_filename=config_filename):
             f"\033[34mConfiguration file {config_filename} already exists.\033[0m\n\n\033[33m{json.dumps(config_user, indent=1)}\033[0m\n\n\033[32m--> Do you want to use it? (yes/no):\033[0m "
         ).lower()
         if user_choice == "yes":
-            print("\033[34mUsing existing configuration.\033[0m")
             return config_user
         else:
-            print("\033[34mCreating new configuration.\033[0m")
+            pass
 
     # Create new configuration
     config_user = {
         "model_path": input(
             f"\033[32m--> Enter the path for model weights (default: {os.path.join(os.getcwd(), 'model')}):\033[0m "
         ),
-        "offload_per_layer": input("\033[32m--> Enter offload per layer:\033[0m ")
+        "offload_per_layer": input("\033[32m--> Enter offload per layer:\033[0m "),
     }
-    
+
     if config_user["model_path"] == "":
         config_user["model_path"] = os.path.join(os.getcwd(), "model")
 
     # Save configuration
     with open(config_filename, "w") as file:
         json.dump(config_user, file, indent=4)
-    
+
     print(f"\033[34mConfiguration saved to {config_filename}\033[0m")
     return config_user
+
 
 def download_huggingface_model(repo_id=repo_id, model_path=""):
     from huggingface_hub import snapshot_download
@@ -139,7 +148,11 @@ def download_huggingface_model(repo_id=repo_id, model_path=""):
         print(f"\033[31mError downloading model weights:\033[0m {e}")
 
 
-def spinning_wheel():
+def spinning_wheel(stop_event, message):
+    
+    sys.stdout.write("\033[?25l")
+    sys.stdout.flush()
+
     anim = [
         "[    ]",
         "[=   ]",
@@ -156,34 +169,33 @@ def spinning_wheel():
         "[==  ]",
         "[=   ]",
     ]
-    while not thread_stop_event.is_set():  # Continue while the stop event is not set
+    while not stop_event.is_set():
         for frame in anim:
-            if thread_stop_event.is_set():
-                print("\033[K\r✅", end="\n")
+            if stop_event.is_set():
                 break
-            print(frame, end="\033[K\r")
-            sys.stdout.flush()
+            # Print the frame and stay on the same line
+            print(f"\033[34m{message} {frame}\033[0m", end="\033[K\r", flush=True)
             time.sleep(0.1)
 
+    final_message = "✅"
+    # Clear the line and print the final message
+    print("\033[K\r" + f"\033[34m{message} {final_message}\033[0m", flush=True)
 
-def main(state_path="", config_user=""):
-    import torch
-    from torch.nn import functional as F
-    from hqq.core.quantize import BaseQuantizeConfig
-    from huggingface_hub import snapshot_download
-    from tqdm.auto import trange
-    from transformers import AutoConfig, AutoTokenizer
-    from transformers.utils import logging as hf_logging
-    from src.build_model import OffloadConfig, QuantConfig, build_model
-    from transformers import TextStreamer
+    # Show the cursor again
+    sys.stdout.write("\033[?25h")
+    sys.stdout.flush()
+
+def load_model():
     model_name = "mistralai/Mixtral-8x7B-Instruct-v0.1"
     quantized_model_name = "lavawolfiee/Mixtral-8x7B-Instruct-v0.1-offloading-demo"
 
+    # Load configuration
     config = AutoConfig.from_pretrained(quantized_model_name)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     offload_per_layer = int(config_user["offload_per_layer"])
     num_experts = config.num_local_experts
 
+    # Setup offloading configuration
     offload_config = OffloadConfig(
         main_size=config.num_hidden_layers * (num_experts - offload_per_layer),
         offload_size=config.num_hidden_layers * offload_per_layer,
@@ -191,6 +203,7 @@ def main(state_path="", config_user=""):
         offload_per_layer=offload_per_layer,
     )
 
+    # Attention and FFN quantization configuration
     attn_config = BaseQuantizeConfig(
         nbits=4,
         group_size=64,
@@ -207,6 +220,7 @@ def main(state_path="", config_user=""):
     )
     quant_config = QuantConfig(ffn_config=ffn_config, attn_config=attn_config)
 
+    # Build and return the model
     model = build_model(
         device=device,
         quant_config=quant_config,
@@ -214,15 +228,22 @@ def main(state_path="", config_user=""):
         state_path=state_path,
     )
 
+    # Initialize tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    return model_name, model, tokenizer, device
+
+def process_user_input(model_name, model, tokenizer, device):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
     past_key_values = None
     sequence = None
     seq_len = 0
+    thread_stop_event.set()
+    wheel_thread.join()
+
     while True:
-        print("User: ", end="")
+        print("\033[32mUser:\033[0m ", end="")
         user_input = input()
-        print("\n")
 
         user_entry = dict(role="user", content=user_input)
         input_ids = tokenizer.apply_chat_template([user_entry], return_tensors="pt").to(
@@ -237,7 +258,6 @@ def main(state_path="", config_user=""):
                 [1, seq_len - 1], dtype=torch.int, device=device
             )
 
-        print("Mixtral: ", end="")
         result = model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -251,10 +271,9 @@ def main(state_path="", config_user=""):
             return_dict_in_generate=True,
             output_hidden_states=True,
         )
-
+        print("\n")
         sequence = result["sequences"]
         past_key_values = result["past_key_values"]
-
 
 if __name__ == "__main__":
     check_requirements()
@@ -269,5 +288,12 @@ if __name__ == "__main__":
         state_path = download_huggingface_model(
             repo_id=repo_id, model_path=config["model_path"]
         )
-    os.system("cls" if os.name == "nt" else "clear")
-    main(state_path=state_path, config_user=config_user)
+    
+    print("\033[34mWelcome to Mixtral-8x7B-Instruct CLI!\033[0m")
+    thread_stop_event = threading.Event()
+    wheel_thread = threading.Thread(target=spinning_wheel, args=(thread_stop_event, "Preparing (it may take a few minutes)..."))
+    wheel_thread.start()
+    model_name, model, tokenizer, device = load_model()
+    thread_stop_event.set()
+    wheel_thread.join()
+    process_user_input(model_name, model, tokenizer, device)
