@@ -28,7 +28,7 @@ This script assumes that all necessary dependencies are installed and Python 3.x
 Acknowledgments:
 This tool is based on the work found in https://github.com/dvmazur/mixtral-offloading.git. I thank them for their foundational work, which has been instrumental in the development of this CLI tool.
 
-Author: Mo Rahmati
+Author: Mo 
 Version: 1.0.0
 """
 
@@ -40,7 +40,8 @@ import importlib.metadata as metadata
 import os
 import json
 import time
-
+import warnings
+warnings.filterwarnings("ignore", message="Initializing zero-element tensors is a no-op")
 try:
     from packaging import version
 except ModuleNotFoundError:
@@ -131,30 +132,117 @@ def setup_and_save_config(config_filename=config_filename):
 
 def download_huggingface_model(repo_id=repo_id, model_path=""):
     from huggingface_hub import snapshot_download
-
-    # check if model path folder is empty
-    if os.path.exists(model_path):
-        if os.listdir(model_path):
-            user_choice = input(
-                f"\033[34mModel folder {model_path} is not empty.\033[0m\n\n\033[32m--> Do you want to download the model weights anyway? (yes/no):\033[0m "
-            ).lower()
-            if user_choice == "no":
-                print("\033[34mSkipping model weights download.\033[0m")
-                return
     try:
         print(f"\033[34mDownloading model weights from {repo_id}...\033[0m")
         time.sleep(1)
         file_path = snapshot_download(repo_id=repo_id, cache_dir=model_path)
-        
+
         print(f"\033[34mModel weights downloaded to {file_path}\033[0m")
+        return file_path
     except Exception as e:
         print(f"\033[31mError downloading model weights:\033[0m {e}")
 
+def spinning_wheel():
+    anim = ["[    ]", "[=   ]", "[==  ]", "[=== ]", "[ ===]", "[  ==]", "[   =]", "[    ]", "[   =]", "[  ==]", "[ ===]", "[=== ]", "[==  ]", "[=   ]"]
+    while not thread_stop_event.is_set():  # Continue while the stop event is not set
+        for frame in anim:
+            if thread_stop_event.is_set(): 
+                print("\033[K\r✅", end="\n")
+                break
+            print(frame, end="\033[K\r")
+            sys.stdout.flush()
+            time.sleep(0.1)
 
-def main():
-    return
+def main(state_path=""):
+    import torch
+    from torch.nn import functional as F
+    from hqq.core.quantize import BaseQuantizeConfig
+    from huggingface_hub import snapshot_download
+    from tqdm.auto import trange
+    from transformers import AutoConfig, AutoTokenizer
+    from transformers.utils import logging as hf_logging
 
+    from src.build_model import OffloadConfig, QuantConfig, build_model
 
+    model_name = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+    quantized_model_name = "lavawolfiee/Mixtral-8x7B-Instruct-v0.1-offloading-demo"
+
+    config = AutoConfig.from_pretrained(quantized_model_name)
+    device = torch.device("cuda:0")
+    offload_per_layer = 2
+    num_experts = config.num_local_experts
+
+    offload_config = OffloadConfig(
+        main_size=config.num_hidden_layers * (num_experts - offload_per_layer),
+        offload_size=config.num_hidden_layers * offload_per_layer,
+        buffer_size=4,
+        offload_per_layer=offload_per_layer,
+    )
+
+    attn_config = BaseQuantizeConfig(
+        nbits=4,
+        group_size=64,
+        quant_zero=True,
+        quant_scale=True,
+    )
+    attn_config["scale_quant_params"]["group_size"] = 256
+
+    ffn_config = BaseQuantizeConfig(
+        nbits=2,
+        group_size=16,
+        quant_zero=True,
+        quant_scale=True,
+    )
+    quant_config = QuantConfig(ffn_config=ffn_config, attn_config=attn_config)
+
+    model = build_model(
+        device=device,
+        quant_config=quant_config,
+        offload_config=offload_config,
+        state_path=state_path,
+    )
+
+    from transformers import TextStreamer
+
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
+    past_key_values = None
+    sequence = None
+
+    seq_len = 0
+    while True:
+        print("User: ", end="")
+        user_input = input()
+        print("\n")
+
+        user_entry = dict(role="user", content=user_input)
+        input_ids = tokenizer.apply_chat_template([user_entry], return_tensors="pt").to(device)
+
+        if past_key_values is None:
+            attention_mask = torch.ones_like(input_ids)
+        else:
+            seq_len = input_ids.size(1) + past_key_values[0][0][0].size(1)
+            attention_mask = torch.ones([1, seq_len - 1], dtype=torch.int, device=device)
+
+        print("Mixtral: ", end="")
+        result = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            streamer=streamer,
+            do_sample=True,
+            temperature=0.9,
+            top_p=0.9,
+            max_new_tokens=512,
+            pad_token_id=tokenizer.eos_token_id,
+            return_dict_in_generate=True,
+            output_hidden_states=True,
+        )
+        print("\n")
+
+        sequence = result["sequences"]
+        past_key_values = result["past_key_values"]
+    
 if __name__ == "__main__":
     check_requirements()
     setup_and_save_config()
@@ -164,4 +252,9 @@ if __name__ == "__main__":
     if config["model_path"] == "":
         config["model_path"] = os.path.join(os.getcwd(), "model")
 
-    download_huggingface_model(repo_id=repo_id, model_path=config["model_path"])
+    state_path = download_huggingface_model(repo_id=repo_id, model_path=config["model_path"])
+
+    main(state_path=state_path)
+
+
+    
