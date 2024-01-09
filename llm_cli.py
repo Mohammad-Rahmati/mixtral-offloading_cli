@@ -1,49 +1,32 @@
 #!/usr/bin/env python3
 """
-Mixtral8x7B-Instruct (https://huggingface.co/mistralai/Mixtral-8x7B-v0.1) CLI Tool
+Mixtral8x7B-Instruct CLI Tool
 ------------------------------
-
-This module, `llm_cli.py`, provides a command-line interface for interacting with Mixtral8x7B-Instruct. 
-It allows users to load the model, perform text generation, and access various functionalities of the LLM in a convenient and user-friendly manner.
-
-Acknowledgments:
-This tool is based on the work found in https://github.com/dvmazur/mixtral-offloading.git. I thank them for their foundational work, which has been instrumental in the development of this CLI tool.
-
-Author: 1110ra
+Provides a command-line interface for Mixtral8x7B-Instruct LLM.
 """
+
 import os
-os.system("cls" if os.name == "nt" else "clear")
-
-import warnings
-
-warnings.filterwarnings(
-    "ignore", message="Initializing zero-element tensors is a no-op"
-)
-import argparse
 import sys
-import subprocess
-from subprocess import run, PIPE
-import importlib.metadata as metadata
 import json
-import threading
 import time
 import threading
+import subprocess
+import logging
+import importlib.metadata as metadata
+from subprocess import run, PIPE
+from packaging import version
 import torch
 from torch.nn import functional as F
-from hqq.core.quantize import BaseQuantizeConfig
 from huggingface_hub import snapshot_download
-from transformers import AutoConfig, AutoTokenizer
+from transformers import AutoConfig, AutoTokenizer, TextStreamer
 from src.build_model import OffloadConfig, QuantConfig, build_model
-from transformers import TextStreamer
+from hqq.core.quantize import BaseQuantizeConfig
 
-try:
-    from packaging import version
-except ModuleNotFoundError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "packaging"])
-    from packaging import version
-
-config_filename = "config.json"
-repo_id = "lavawolfiee/Mixtral-8x7B-Instruct-v0.1-offloading-demo"
+# Constants
+CONFIG_FILENAME = "config.json"
+REPO_ID = "lavawolfiee/Mixtral-8x7B-Instruct-v0.1-offloading-demo"
+MODEL_NAME = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+QUANTIZED_MODEL_NAME = "lavawolfiee/Mixtral-8x7B-Instruct-v0.1-offloading-demo"
 
 
 def check_requirements(requirements_file="requirements.txt"):
@@ -94,7 +77,7 @@ def check_requirements(requirements_file="requirements.txt"):
         )
 
 
-def setup_and_save_config(config_filename=config_filename):
+def setup_and_save_config(config_filename=CONFIG_FILENAME):
     # Check if the configuration file already exists
     if os.path.exists(config_filename):
         with open(config_filename, "r") as file:
@@ -127,9 +110,7 @@ def setup_and_save_config(config_filename=config_filename):
     return config_user
 
 
-def download_huggingface_model(repo_id=repo_id, model_path=""):
-    from huggingface_hub import snapshot_download
-
+def download_huggingface_model(repo_id=REPO_ID, model_path=""):
     os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 
     try:
@@ -177,7 +158,7 @@ def spinning_wheel(stop_event, message):
 
     final_message = "✅"
     # Clear the line and print the final message
-    print("\033[K\r" + f"\033[34m{message} {final_message}\033[0m", flush=True)
+    print("\033[K\r" + f"\033[34mWelcome to Mixtral-8x7B-Instruct CLI! {final_message}\033[0m", flush=True)
 
     # Show the cursor again
     sys.stdout.write("\033[?25h")
@@ -185,12 +166,10 @@ def spinning_wheel(stop_event, message):
 
 
 def load_model():
-    model_name = "mistralai/Mixtral-8x7B-Instruct-v0.1"
-    quantized_model_name = "lavawolfiee/Mixtral-8x7B-Instruct-v0.1-offloading-demo"
-
     # Load configuration
-    config = AutoConfig.from_pretrained(quantized_model_name)
+    config = AutoConfig.from_pretrained(QUANTIZED_MODEL_NAME)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
     offload_per_layer = int(config_user["offload_per_layer"])
     num_experts = config.num_local_experts
 
@@ -210,7 +189,7 @@ def load_model():
         quant_scale=True,
     )
     attn_config["scale_quant_params"]["group_size"] = 256
-
+    
     ffn_config = BaseQuantizeConfig(
         nbits=2,
         group_size=16,
@@ -218,8 +197,9 @@ def load_model():
         quant_scale=True,
     )
     quant_config = QuantConfig(ffn_config=ffn_config, attn_config=attn_config)
-
+    
     # Build and return the model
+
     model = build_model(
         device=device,
         quant_config=quant_config,
@@ -228,8 +208,8 @@ def load_model():
     )
 
     # Initialize tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    return model_name, model, tokenizer, device
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    return model, tokenizer, device
 
 
 def generate_tokens(
@@ -250,8 +230,8 @@ def generate_tokens(
     )
 
 
-def process_user_input(model_name, model, tokenizer, device):
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+def process_user_input(model, tokenizer, device):
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
     past_key_values = None
     sequence = None
@@ -286,7 +266,8 @@ def process_user_input(model_name, model, tokenizer, device):
 if __name__ == "__main__":
     check_requirements()
     config_user = setup_and_save_config()
-    os.system("cls" if os.name == "nt" else "clear")
+    os.system("clear")
+
     if os.path.exists(config_user["model_path"]):
         state_path = os.path.join(
             config_user["model_path"],
@@ -303,7 +284,8 @@ if __name__ == "__main__":
         args=(thread_stop_event, "Welcome to Mixtral-8x7B-Instruct CLI! Loading..."),
     )
     wheel_thread.start()
-    model_name, model, tokenizer, device = load_model()
+    model, tokenizer, device = load_model()
     thread_stop_event.set()
     wheel_thread.join()
-    process_user_input(model_name, model, tokenizer, device)
+    
+    process_user_input(model, tokenizer, device)

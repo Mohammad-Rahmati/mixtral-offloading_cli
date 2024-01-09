@@ -26,6 +26,8 @@ from .custom_layers import (
 )
 from .utils import with_default_dtype
 
+import warnings
+warnings.filterwarnings('ignore', message='Initializing zero-element tensors is a no-op')
 
 @dataclass(frozen=True)
 class OffloadConfig:
@@ -178,7 +180,7 @@ def build_model(
         expert = make_empty_expert(config, quant_config)
         expert.load_state_dict(state_dict_00)
         return MixtralExpertWrapper(expert, device=device)
-
+    
     with device, with_default_dtype(torch.float16):
         model = MixtralForCausalLM(
             AutoConfig.from_pretrained(
@@ -188,7 +190,7 @@ def build_model(
                 device_map=device,
             ),
         )
-
+    
     model_config = AutoConfig.from_pretrained(model_name)
     replace_attn_layers(model, model_config, quant_config, device)
     state_index_path = os.path.join(state_path, "model.safetensors.index.json")
@@ -200,6 +202,7 @@ def build_model(
         weight_map["model.embed_tokens.weight"],
     )
     model.load_state_dict(load_file(trunk_state_path, device=str(device)), strict=True)
+    
 
     expert_cache = ExpertCache(
         make_module=_make_module,
