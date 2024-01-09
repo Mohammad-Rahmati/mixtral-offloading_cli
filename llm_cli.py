@@ -149,7 +149,6 @@ def download_huggingface_model(repo_id=repo_id, model_path=""):
 
 
 def spinning_wheel(stop_event, message):
-    
     sys.stdout.write("\033[?25l")
     sys.stdout.flush()
 
@@ -184,6 +183,7 @@ def spinning_wheel(stop_event, message):
     # Show the cursor again
     sys.stdout.write("\033[?25h")
     sys.stdout.flush()
+
 
 def load_model():
     model_name = "mistralai/Mixtral-8x7B-Instruct-v0.1"
@@ -232,14 +232,32 @@ def load_model():
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     return model_name, model, tokenizer, device
 
+
+def generate_tokens(
+    model, input_ids, attention_mask, past_key_values, streamer, tokenizer
+):
+    result = model.generate(
+        input_ids=input_ids,
+        attention_mask=attention_mask,
+        past_key_values=past_key_values,
+        streamer=streamer,
+        do_sample=True,
+        temperature=0.9,
+        top_p=0.9,
+        max_new_tokens=512,
+        pad_token_id=tokenizer.eos_token_id,
+        return_dict_in_generate=True,
+        output_hidden_states=True,
+    )
+
+
 def process_user_input(model_name, model, tokenizer, device):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
     past_key_values = None
     sequence = None
     seq_len = 0
-    thread_stop_event.set()
-    wheel_thread.join()
+    past_key_values = None
 
     while True:
         print("\033[32mUser:\033[0m ", end="")
@@ -258,22 +276,13 @@ def process_user_input(model_name, model, tokenizer, device):
                 [1, seq_len - 1], dtype=torch.int, device=device
             )
 
-        result = model.generate(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            streamer=streamer,
-            do_sample=True,
-            temperature=0.9,
-            top_p=0.9,
-            max_new_tokens=512,
-            pad_token_id=tokenizer.eos_token_id,
-            return_dict_in_generate=True,
-            output_hidden_states=True,
+        result = generate_tokens(
+            model, input_ids, attention_mask, past_key_values, streamer, tokenizer
         )
-        print("\n")
+
         sequence = result["sequences"]
         past_key_values = result["past_key_values"]
+
 
 if __name__ == "__main__":
     check_requirements()
@@ -288,10 +297,12 @@ if __name__ == "__main__":
         state_path = download_huggingface_model(
             repo_id=repo_id, model_path=config["model_path"]
         )
-    
-    print("\033[34mWelcome to Mixtral-8x7B-Instruct CLI!\033[0m")
+
     thread_stop_event = threading.Event()
-    wheel_thread = threading.Thread(target=spinning_wheel, args=(thread_stop_event, "Preparing (it may take a few minutes)..."))
+    wheel_thread = threading.Thread(
+        target=spinning_wheel,
+        args=(thread_stop_event, "Welcome to Mixtral-8x7B-Instruct CLI! Loading..."),
+    )
     wheel_thread.start()
     model_name, model, tokenizer, device = load_model()
     thread_stop_event.set()
