@@ -1,4 +1,5 @@
 model/
+model_temp/
 src/__pycache__/
 src/build/
 src/dist/

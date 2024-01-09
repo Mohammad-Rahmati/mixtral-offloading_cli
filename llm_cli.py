@@ -114,14 +114,15 @@ def download_huggingface_model(repo_id=REPO_ID, model_path=""):
     os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 
     try:
-        print(f"\033[34mDownloading model weights from {repo_id}\033[0m")
+        print(f"\033[34mDownloading model weights from {REPO_ID}\033[0m")
         time.sleep(1)
-        file_path = snapshot_download(repo_id=repo_id, cache_dir=model_path)
+        file_path = snapshot_download(repo_id=REPO_ID, cache_dir=model_path)
         for f in os.listdir(model_path):
             if f.startswith("tmp"):
                 os.remove(os.path.join(model_path, f))
 
-        print(f"\033[34mModel weights downloaded to {file_path}\033[0m")
+        os.system("clear")
+        print(f"\033[34mModel weights downloaded to {file_path}\033[0m")        
         return file_path
 
     except Exception as e:
@@ -275,7 +276,7 @@ if __name__ == "__main__":
         )
     else:
         state_path = download_huggingface_model(
-            repo_id=repo_id, model_path=config["model_path"]
+            repo_id=REPO_ID, model_path=config_user["model_path"]
         )
 
     thread_stop_event = threading.Event()

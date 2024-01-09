@@ -1,4 +1,4 @@
 {
-    "model_path": "/home/mo/mixtral-offloading_cli/model",
-    "offload_per_layer": "4"
+    "model_path": " /home/mo/mixtral-offloading_cli/model_temp",
+    "offload_per_layer": "0"
 }
