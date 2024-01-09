@@ -1,6 +1,6 @@
 {
-    "offload_per_layer": 0,
-    "temperature": 0.9,
-    "top_p": 0.9,
-    "max_new_tokens": 512
+    "offload_per_layer": "0",
+    "temperature": "0.9",
+    "top_p": "0.9",
+    "max_new_tokens": "10"
 }

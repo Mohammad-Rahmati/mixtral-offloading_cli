@@ -90,15 +90,14 @@ def setup_and_save_config():
         ).lower()
         if user_choice == "yes":
             return config_user
-    
+
     # Create new configuration
     config_user = {
-        "offload_per_layer": input("\033[32m--> Enter offload per layer:\033[0m "),
-        "temperature": input("\033[32m--> Enter temperature:\033[0m "),
-        "top_p": input("\033[32m--> Enter top p:\033[0m "),
+        "offload_per_layer": input("\033[32m--> Enter offload per layer[0-8]:\033[0m "),
+        "temperature": input("\033[32m--> Enter temperature [0-1]:\033[0m "),
+        "top_p": input("\033[32m--> Enter top_p [0-1]:\033[0m "),
         "max_new_tokens": input("\033[32m--> Enter max new tokens:\033[0m "),
     }
-    
 
     # Save configuration
     with open(CONFIG_FILENAME, "w") as file:
@@ -108,15 +107,13 @@ def setup_and_save_config():
     return config_user
 
 
-def download_huggingface_model(repo_id=REPO_ID, config_user=None):
+def download_huggingface_model(repo_id=REPO_ID):
     os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 
     try:
         print(f"\033[34mDownloading model weights from {REPO_ID}\033[0m")
         time.sleep(1)
-        file_path = snapshot_download(
-            repo_id=REPO_ID, cache_dir=MODEL_PATH
-        )
+        file_path = snapshot_download(repo_id=REPO_ID, cache_dir=MODEL_PATH)
         for f in os.listdir(MODEL_PATH):
             if f.startswith("tmp"):
                 os.remove(os.path.join(MODEL_PATH, f))
@@ -225,9 +222,9 @@ def generate_tokens(
         past_key_values=past_key_values,
         streamer=streamer,
         do_sample=True,
-        temperature=config_user["temperature"],
-        top_p=config_user["top_p"],
-        max_new_tokens=config_user["max_new_tokens"],
+        temperature=int(config_user["temperature"]),
+        top_p=int(config_user["top_p"]),
+        max_new_tokens=int(config_user["max_new_tokens"]),
         pad_token_id=tokenizer.eos_token_id,
         return_dict_in_generate=True,
         output_hidden_states=True,
@@ -275,9 +272,7 @@ if __name__ == "__main__":
     if os.path.exists(MODEL_PATH):
         state_path = os.path.join(MODEL_PATH, RELATIVE_STATE_PATH)
     else:
-        state_path = download_huggingface_model(
-            repo_id=REPO_ID, config_user=config_user
-        )
+        state_path = download_huggingface_model(repo_id=REPO_ID)
 
     thread_stop_event = threading.Event()
     wheel_thread = threading.Thread(
