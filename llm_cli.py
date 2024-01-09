@@ -93,7 +93,7 @@ def setup_and_save_config():
 
     # Create new configuration
     config_user = {
-        "offload_per_layer": input("\033[32m--> Enter offload per layer int [0-6]:\033[0m "),
+        "offload_per_layer": input("\033[32m--> Enter offload per layer int [0-7]:\033[0m "),
         "temperature": input("\033[32m--> Enter temperature float [0-1]:\033[0m "),
         "top_p": input("\033[32m--> Enter top_p float [0-1]:\033[0m "),
         "max_new_tokens": input("\033[32m--> Enter max new tokens int:\033[0m "),

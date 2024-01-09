@@ -35,3 +35,5 @@ pip install dist/hqq_aten-<version>-<tags>.whl
 ```bash
 python llm_cli.py
 ```
+
+The script initially downloads 20 gigabytes of data during its first execution.
