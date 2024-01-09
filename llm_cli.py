@@ -93,10 +93,10 @@ def setup_and_save_config():
 
     # Create new configuration
     config_user = {
-        "offload_per_layer": input("\033[32m--> Enter offload per layer[0-8]:\033[0m "),
-        "temperature": input("\033[32m--> Enter temperature [0-1]:\033[0m "),
-        "top_p": input("\033[32m--> Enter top_p [0-1]:\033[0m "),
-        "max_new_tokens": input("\033[32m--> Enter max new tokens:\033[0m "),
+        "offload_per_layer": input("\033[32m--> Enter offload per layer int [0-6]:\033[0m "),
+        "temperature": input("\033[32m--> Enter temperature float [0-1]:\033[0m "),
+        "top_p": input("\033[32m--> Enter top_p float [0-1]:\033[0m "),
+        "max_new_tokens": input("\033[32m--> Enter max new tokens int:\033[0m "),
     }
 
     # Save configuration
@@ -222,8 +222,8 @@ def generate_tokens(
         past_key_values=past_key_values,
         streamer=streamer,
         do_sample=True,
-        temperature=int(config_user["temperature"]),
-        top_p=int(config_user["top_p"]),
+        temperature=float(config_user["temperature"]),
+        top_p=float(config_user["top_p"]),
         max_new_tokens=int(config_user["max_new_tokens"]),
         pad_token_id=tokenizer.eos_token_id,
         return_dict_in_generate=True,
