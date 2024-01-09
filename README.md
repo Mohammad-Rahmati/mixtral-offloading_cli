@@ -32,4 +32,6 @@ pip install dist/hqq_aten-<version>-<tags>.whl
 ```
 
 ## Run
+```bash
 python llm_cli.py
+```

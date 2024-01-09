@@ -1,8 +1,6 @@
 model/
-model_temp/
 src/__pycache__/
 src/build/
 src/dist/
 src/hqq_aten.egg-info/
 __pycache__/
-temp.py
