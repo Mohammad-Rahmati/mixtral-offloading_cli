@@ -2,5 +2,6 @@
     "offload_per_layer": "0",
     "temperature": "0.9",
     "top_p": "0.9",
-    "max_new_tokens": "512"
+    "max_new_tokens": "512",
+    "custom_instruction": "As an advanced AI language model, your goal is to provide precise, concise, and insightful responses. Address user queries directly and clearly across a wide range of topics. Engage in both factual and creative discussions, ensuring that each interaction is informative and helpful."
 }

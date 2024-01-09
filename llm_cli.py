@@ -97,6 +97,7 @@ def setup_and_save_config():
         "temperature": input("\033[32m--> Enter temperature float [0-1]:\033[0m "),
         "top_p": input("\033[32m--> Enter top_p float [0-1]:\033[0m "),
         "max_new_tokens": input("\033[32m--> Enter max new tokens int:\033[0m "),
+        "custom_instruction": input("\033[32m--> Enter custom instruction string:\033[0m "),
     }
 
     # Save configuration
@@ -230,7 +231,6 @@ def generate_tokens(
         output_hidden_states=True,
     )
 
-
 def process_user_input(model, tokenizer, device):
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
@@ -242,7 +242,9 @@ def process_user_input(model, tokenizer, device):
     while True:
         print("\033[32mUser:\033[0m ", end="")
         user_input = input()
-
+        if past_key_values is None:
+            user_input = config_user["custom_instruction"] + " " + user_input
+        
         user_entry = dict(role="user", content=user_input)
         input_ids = tokenizer.apply_chat_template([user_entry], return_tensors="pt").to(
             device
@@ -255,12 +257,16 @@ def process_user_input(model, tokenizer, device):
             attention_mask = torch.ones(
                 [1, seq_len - 1], dtype=torch.int, device=device
             )
-
+        time_start = time.time()
         result = generate_tokens(
             model, input_ids, attention_mask, past_key_values, streamer, tokenizer
         )
-
+        time_end = time.time()
+        
         sequence = result["sequences"]
+        duration = time_end - time_start
+        token_len = sequence[0].shape[0]
+        print(f"\033[34m{duration:.2f} seconds, {token_len/duration:.2f} tokens/s\033[0m")
         past_key_values = result["past_key_values"]
 
 
