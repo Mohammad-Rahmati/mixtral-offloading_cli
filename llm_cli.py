@@ -234,9 +234,9 @@ def load_model():
 
 
 def generate_tokens(
-    model, input_ids, attention_mask, past_key_values, streamer, tokenizer
-):
-    result = model.generate(
+    model, input_ids, attention_mask, past_key_values, streamer, tokenizer):
+    
+    return model.generate(
         input_ids=input_ids,
         attention_mask=attention_mask,
         past_key_values=past_key_values,
