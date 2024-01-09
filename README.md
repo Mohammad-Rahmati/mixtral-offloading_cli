@@ -1,26 +1,35 @@
-# Mixtral offloading
+# `llm_cli.py` Module README
 
-This project implements efficient inference of [Mixtral-8x7B models](https://mistral.ai/news/mixtral-of-experts/).
+## Introduction
 
-## How does it work?
+The `llm_cli.py` module is a command-line interface designed for seamless interaction with the Mixtral8x7B-Instruct Large Language Model (LLM). It provides a straightforward, efficient way for users to engage with the model, facilitating text generation and other functionalities.
 
-In summary, we achieve efficient inference of Mixtral-8x7B models through a combination of techniques:
+## Features
 
-* **Mixed quantization with HQQ**. We apply separate quantization schemes for attention layers and experts to fit the model into the combined GPU and CPU memory.
-* **MoE offloading strategy**. Each expert per layer is offloaded separately and only brought pack to GPU when needed. We store active experts in a LRU cache to reduce GPU-RAM communication when computing activations for adjacent tokens.
+- **Model Loading:** Effortlessly load the Mixtral8x7B-Instruct model.
+- **Text Generation:** Utilize the model for generating text based on user inputs.
+- **Access to LLM Functionalities:** Explore various capabilities of the LLM in a user-friendly format.
 
-For more detailed information about our methods and results, please refer to our [tech-report](https://arxiv.org/abs/2312.17238).
+## Acknowledgments
 
-## Running
+Special thanks to the team at [dvmazur/mixtral-offloading](https://github.com/dvmazur/mixtral-offloading.git) for their foundational work. Their contributions have been crucial in the development of this CLI tool.
 
-To try this demo, please use the demo notebook: [./notebooks/demo.ipynb](./notebooks/demo.ipynb) or [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dvmazur/mixtral-offloading/blob/master/notebooks/demo.ipynb)
+## Installation Guide
 
-For now, there is no command-line script available for running the model locally. However, you can create one using the demo notebook as a reference. That being said, contributions are welcome!
+### Step 1: Create a New Environment
 
-## Work in progress
+Before installation, it is recommended to set up a new virtual environment to avoid any conflicts with existing packages.
 
-Some techniques described in our technical report are not yet available in this repo. However, we are actively working on adding support for them in the near future.
+### Step 2: pip install -r requirements.txt
 
-Some of the upcoming features are:
-* Support for other quantization methods
-* Speculative expert prefetching
+### Step 3: Install `hqq_aten`
+
+Navigate to the `src` directory and run the following commands:
+
+```bash
+python3 setup_hqq_aten.py bdist_wheel
+pip install dist/hqq_aten-<version>-<tags>.whl
+```
+
+## Run
+python llm_cli.py

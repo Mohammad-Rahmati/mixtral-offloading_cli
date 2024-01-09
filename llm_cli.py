@@ -12,7 +12,6 @@ This tool is based on the work found in https://github.com/dvmazur/mixtral-offlo
 Author: 1110ra
 """
 import os
-
 os.system("cls" if os.name == "nt" else "clear")
 
 import warnings
@@ -287,7 +286,7 @@ def process_user_input(model_name, model, tokenizer, device):
 if __name__ == "__main__":
     check_requirements()
     config_user = setup_and_save_config()
-
+    os.system("cls" if os.name == "nt" else "clear")
     if os.path.exists(config_user["model_path"]):
         state_path = os.path.join(
             config_user["model_path"],
