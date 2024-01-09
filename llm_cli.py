@@ -24,9 +24,11 @@ from hqq.core.quantize import BaseQuantizeConfig
 
 # Constants
 CONFIG_FILENAME = "config.json"
+MODEL_PATH = os.path.join(os.getcwd(), "model")
 REPO_ID = "lavawolfiee/Mixtral-8x7B-Instruct-v0.1-offloading-demo"
 MODEL_NAME = "mistralai/Mixtral-8x7B-Instruct-v0.1"
 QUANTIZED_MODEL_NAME = "lavawolfiee/Mixtral-8x7B-Instruct-v0.1-offloading-demo"
+RELATIVE_STATE_PATH = "models--lavawolfiee--Mixtral-8x7B-Instruct-v0.1-offloading-demo/snapshots/3d47c8315811b9e0135d4fac21deb88309c6551c"
 
 
 def check_requirements(requirements_file="requirements.txt"):
@@ -77,52 +79,50 @@ def check_requirements(requirements_file="requirements.txt"):
         )
 
 
-def setup_and_save_config(config_filename=CONFIG_FILENAME):
+def setup_and_save_config():
     # Check if the configuration file already exists
-    if os.path.exists(config_filename):
-        with open(config_filename, "r") as file:
+    if os.path.exists(CONFIG_FILENAME):
+        with open(CONFIG_FILENAME, "r") as file:
             config_user = json.load(file)
 
         user_choice = input(
-            f"\033[34mConfiguration file {config_filename} already exists.\033[0m\n\n\033[33m{json.dumps(config_user, indent=1)}\033[0m\n\n\033[32m--> Do you want to use it? (yes/no):\033[0m "
+            f"\033[34mConfiguration file {CONFIG_FILENAME} already exists.\033[0m\n\033[33m{json.dumps(config_user, indent=1)}\033[0m\n\033[32m--> Do you want to use it? (yes/no):\033[0m "
         ).lower()
         if user_choice == "yes":
             return config_user
-        else:
-            pass
-
+    
     # Create new configuration
     config_user = {
-        "model_path": input(
-            f"\033[32m--> Enter the path for model weights (default: {os.path.join(os.getcwd(), 'model')}):\033[0m "
-        ),
         "offload_per_layer": input("\033[32m--> Enter offload per layer:\033[0m "),
+        "temperature": input("\033[32m--> Enter temperature:\033[0m "),
+        "top_p": input("\033[32m--> Enter top p:\033[0m "),
+        "max_new_tokens": input("\033[32m--> Enter max new tokens:\033[0m "),
     }
-
-    if config_user["model_path"] == "":
-        config_user["model_path"] = os.path.join(os.getcwd(), "model")
+    
 
     # Save configuration
-    with open(config_filename, "w") as file:
+    with open(CONFIG_FILENAME, "w") as file:
         json.dump(config_user, file, indent=4)
 
-    print(f"\033[34mConfiguration saved to {config_filename}\033[0m")
+    print(f"\033[34mConfiguration saved to {CONFIG_FILENAME}\033[0m")
     return config_user
 
 
-def download_huggingface_model(repo_id=REPO_ID, model_path=""):
+def download_huggingface_model(repo_id=REPO_ID, config_user=None):
     os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 
     try:
         print(f"\033[34mDownloading model weights from {REPO_ID}\033[0m")
         time.sleep(1)
-        file_path = snapshot_download(repo_id=REPO_ID, cache_dir=model_path)
-        for f in os.listdir(model_path):
+        file_path = snapshot_download(
+            repo_id=REPO_ID, cache_dir=MODEL_PATH
+        )
+        for f in os.listdir(MODEL_PATH):
             if f.startswith("tmp"):
-                os.remove(os.path.join(model_path, f))
+                os.remove(os.path.join(MODEL_PATH, f))
 
         os.system("clear")
-        print(f"\033[34mModel weights downloaded to {file_path}\033[0m")        
+        print(f"\033[34mModel weights downloaded to {file_path}\033[0m")
         return file_path
 
     except Exception as e:
@@ -159,7 +159,11 @@ def spinning_wheel(stop_event, message):
 
     final_message = "✅"
     # Clear the line and print the final message
-    print("\033[K\r" + f"\033[34mWelcome to Mixtral-8x7B-Instruct CLI! {final_message}\033[0m", flush=True)
+    print(
+        "\033[K\r"
+        + f"\033[34mWelcome to Mixtral-8x7B-Instruct CLI! {final_message}\033[0m",
+        flush=True,
+    )
 
     # Show the cursor again
     sys.stdout.write("\033[?25h")
@@ -170,7 +174,7 @@ def load_model():
     # Load configuration
     config = AutoConfig.from_pretrained(QUANTIZED_MODEL_NAME)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
+
     offload_per_layer = int(config_user["offload_per_layer"])
     num_experts = config.num_local_experts
 
@@ -190,7 +194,7 @@ def load_model():
         quant_scale=True,
     )
     attn_config["scale_quant_params"]["group_size"] = 256
-    
+
     ffn_config = BaseQuantizeConfig(
         nbits=2,
         group_size=16,
@@ -198,9 +202,8 @@ def load_model():
         quant_scale=True,
     )
     quant_config = QuantConfig(ffn_config=ffn_config, attn_config=attn_config)
-    
-    # Build and return the model
 
+    # Build and return the model
     model = build_model(
         device=device,
         quant_config=quant_config,
@@ -214,17 +217,17 @@ def load_model():
 
 
 def generate_tokens(
-    model, input_ids, attention_mask, past_key_values, streamer, tokenizer):
-    
+    model, input_ids, attention_mask, past_key_values, streamer, tokenizer
+):
     return model.generate(
         input_ids=input_ids,
         attention_mask=attention_mask,
         past_key_values=past_key_values,
         streamer=streamer,
         do_sample=True,
-        temperature=0.9,
-        top_p=0.9,
-        max_new_tokens=512,
+        temperature=config_user["temperature"],
+        top_p=config_user["top_p"],
+        max_new_tokens=config_user["max_new_tokens"],
         pad_token_id=tokenizer.eos_token_id,
         return_dict_in_generate=True,
         output_hidden_states=True,
@@ -269,14 +272,11 @@ if __name__ == "__main__":
     config_user = setup_and_save_config()
     os.system("clear")
 
-    if os.path.exists(config_user["model_path"]):
-        state_path = os.path.join(
-            config_user["model_path"],
-            "models--lavawolfiee--Mixtral-8x7B-Instruct-v0.1-offloading-demo/snapshots/3d47c8315811b9e0135d4fac21deb88309c6551c",
-        )
+    if os.path.exists(MODEL_PATH):
+        state_path = os.path.join(MODEL_PATH, RELATIVE_STATE_PATH)
     else:
         state_path = download_huggingface_model(
-            repo_id=REPO_ID, model_path=config_user["model_path"]
+            repo_id=REPO_ID, config_user=config_user
         )
 
     thread_stop_event = threading.Event()
@@ -288,5 +288,5 @@ if __name__ == "__main__":
     model, tokenizer, device = load_model()
     thread_stop_event.set()
     wheel_thread.join()
-    
+
     process_user_input(model, tokenizer, device)
